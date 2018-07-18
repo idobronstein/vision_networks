@@ -1,5 +1,6 @@
 import os
 import time
+import sys
 import shutil
 from datetime import timedelta
 
@@ -363,6 +364,7 @@ class DenseNet:
         self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
     def train_all_epochs(self, train_params):
+        sys.stdout.flush()
         n_epochs = train_params['n_epochs']
         learning_rate = train_params['initial_learning_rate']
         batch_size = train_params['batch_size']
@@ -371,6 +373,7 @@ class DenseNet:
         total_start_time = time.time()
         for epoch in range(1, n_epochs + 1):
             print("\n", '-' * 30, "Train epoch: %d" % epoch, '-' * 30, '\n')
+            sys.stdout.flush()
             start_time = time.time()
             if epoch == reduce_lr_epoch_1 or epoch == reduce_lr_epoch_2:
                 learning_rate = learning_rate / 10
@@ -409,6 +412,7 @@ class DenseNet:
         brach_num = num_examples // batch_size
         for i in range(brach_num):
             print("Branch num %s from %s" % (str(brach_num), str(i)))
+            sys.stdout.flush()
             batch = data.next_batch(batch_size)
             images, labels = batch
             feed_dict = {
@@ -428,7 +432,7 @@ class DenseNet:
                     loss, accuracy, self.batches_step, prefix='per_batch',
                     should_print=False)
         mean_loss = np.mean(total_loss)
-        mean_accuracy = np.mean(total_accuracy)
+        mean_accuracy =  np.mean(total_accuracy)
         return mean_loss, mean_accuracy
 
     def test(self, data, batch_size):

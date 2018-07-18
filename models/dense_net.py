@@ -406,7 +406,9 @@ class DenseNet:
         num_examples = data.num_examples
         total_loss = []
         total_accuracy = []
-        for i in range(num_examples // batch_size):
+        brach_num = num_examples // batch_size
+        for i in range(brach_num):
+            print("Branch num %s from %s" % (str(brach_num), str(i)))
             batch = data.next_batch(batch_size)
             images, labels = batch
             feed_dict = {

@@ -309,7 +309,7 @@ class DenseNet:
 
     def relu(self, _input):
         output = tf.nn.relu(_input)
-        tf.add_to_collection(output, "relu_output")
+        tf.add_to_collection("relu_output", output)
         return output
 
     def weight_variable_msra(self, shape, name):

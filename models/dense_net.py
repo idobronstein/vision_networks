@@ -137,7 +137,7 @@ class DenseNet:
 
     @property
     def model_identifier(self):
-        return "{}_growth_rate={}_depth={}_dataset_{}_weight_decay={}".format(
+        return "relu_regulation_{}_growth_rate={}_depth={}_dataset_{}_weight_decay={}".format(
             self.model_type, self.growth_rate, self.depth, self.dataset_name, self.weight_decay)
 
     def save_model(self, global_step=None):
@@ -193,7 +193,7 @@ class DenseNet:
             # BN
             output = self.batch_norm(_input)
             # ReLU
-            output = tf.nn.relu(output)
+            output = self.relu(output)
             # convolution
             output = self.conv2d(
                 output, out_features=out_features, kernel_size=kernel_size)
@@ -204,7 +204,7 @@ class DenseNet:
     def bottleneck(self, _input, out_features):
         with tf.variable_scope("bottleneck"):
             output = self.batch_norm(_input)
-            output = tf.nn.relu(output)
+            output = self.relu(output)
             inter_features = out_features * 4
             output = self.conv2d(
                 output, out_features=inter_features, kernel_size=1,
@@ -261,7 +261,7 @@ class DenseNet:
         # BN
         output = self.batch_norm(_input)
         # ReLU
-        output = tf.nn.relu(output)
+        output = self.relu(output)
         # average pooling
         last_pool_kernel = int(output.get_shape()[-2])
         output = self.avg_pool(output, k=last_pool_kernel)
@@ -305,6 +305,11 @@ class DenseNet:
             )
         else:
             output = _input
+        return output
+
+    def relu(self, _input):
+        output = tf.nn.relu(_input)
+        tf.add_to_collection(output, "relu_output")
         return output
 
     def weight_variable_msra(self, shape, name):
@@ -352,13 +357,15 @@ class DenseNet:
         self.cross_entropy = cross_entropy
         #l2_loss = tf.add_n(
         #   [tf.nn.l2_loss(var) for var in tf.trainable_variables()])
-        l1_loss = tf.abs(tf.add_n([tf.reduce_sum(var) for var in tf.trainable_variables()]))
+        #l1_loss = tf.abs(tf.add_n([tf.reduce_sum(var) for var in tf.trainable_variables()]))
+        relu_output = tf.get_collection("relu_output")
+        l1_loss_activation = tf.abs(tf.add_n([tf.reduce_sum(var) for var in relu_output]))
 
         # optimizer and train step
         optimizer = tf.train.MomentumOptimizer(
             self.learning_rate, self.nesterov_momentum, use_nesterov=True)
         self.train_step = optimizer.minimize(
-            cross_entropy + l1_loss * self.weight_decay)
+            cross_entropy + l1_loss_activation * self.weight_decay)
 
         correct_prediction = tf.equal(
             tf.argmax(prediction, 1),

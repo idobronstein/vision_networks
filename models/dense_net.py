@@ -349,14 +349,15 @@ class DenseNet:
         cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
             logits=logits, labels=self.labels))
         self.cross_entropy = cross_entropy
-        l2_loss = tf.add_n(
-            [tf.nn.l2_loss(var) for var in tf.trainable_variables()])
+        #l2_loss = tf.add_n(
+        #   [tf.nn.l2_loss(var) for var in tf.trainable_variables()])
+        l1_loss = tf.abs(tf.add_n([var for var in tf.trainable_variables()]))
 
         # optimizer and train step
         optimizer = tf.train.MomentumOptimizer(
             self.learning_rate, self.nesterov_momentum, use_nesterov=True)
         self.train_step = optimizer.minimize(
-            cross_entropy + l2_loss * self.weight_decay)
+            cross_entropy + l1_loss * self.weight_decay)
 
         correct_prediction = tf.equal(
             tf.argmax(prediction, 1),

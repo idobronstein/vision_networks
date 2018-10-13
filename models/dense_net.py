@@ -3,6 +3,7 @@ import time
 import sys
 import shutil
 from datetime import timedelta
+from functools import reduce
 
 import numpy as np
 import tensorflow as tf
@@ -136,8 +137,8 @@ class DenseNet:
 
     @property
     def model_identifier(self):
-        return "{}_growth_rate={}_depth={}_dataset_{}".format(
-            self.model_type, self.growth_rate, self.depth, self.dataset_name)
+        return "{}_growth_rate={}_depth={}_dataset_{}_weight_decay={}".format(
+            self.model_type, self.growth_rate, self.depth, self.dataset_name, self.weight_decay)
 
     def save_model(self, global_step=None):
         self.saver.save(self.sess, self.save_path, global_step=global_step)
@@ -454,3 +455,20 @@ class DenseNet:
         mean_loss = np.mean(total_loss)
         mean_accuracy = np.mean(total_accuracy)
         return mean_loss, mean_accuracy
+
+    def count_zero(self):
+        all_trainable_variables = tf.trainable_variables()
+        trainable_variables_num = len(all_trainable_variables) 
+        j = 0
+        zero_num = 0
+        for var in all_trainable_variables:
+            LOG.info("checking varialbe {} out of {}".format(j, trainable_variables_num))
+            var_size = int(reduce(lambda x, y: x*y, var.shape))
+            var_reshape = tf.reshape(var, [var_size])
+            for i in range(var_size):
+                if var_reshape[i] == 0:
+                    zero_num += 1
+            j += 1
+            LOG.info("Zero number until know: {}".format(zero_num))
+        return zero_num
+

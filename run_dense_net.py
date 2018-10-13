@@ -46,6 +46,9 @@ if __name__ == '__main__':
              'If provided together with `--train` flag testing will be'
              'performed right after training.')
     parser.add_argument(
+        '--count_zero', action='store_true',
+        help='Check the number of 0 weights is the end of the training.')
+    parser.add_argument(
         '--model_type', '-m', type=str, choices=['DenseNet', 'DenseNet-BC'],
         default='DenseNet',
         help='What type of model to use')
@@ -145,3 +148,8 @@ if __name__ == '__main__':
         print("Testing...")
         loss, accuracy = model.test(data_provider.test, batch_size=200)
         print("mean cross_entropy: %f, mean accuracy: %f" % (loss, accuracy))
+        if args.count_zero:
+            print("Counting Zero")
+            zero_num = model.count_zero()
+            print("weight_decay: %f, mean accuracy: %f, zero_num: %f" % (args.weight_decay, accuracy, zero_num))
+

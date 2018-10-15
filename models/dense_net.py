@@ -352,7 +352,7 @@ class DenseNet:
         self.cross_entropy = cross_entropy
         #l2_loss = tf.add_n(
         #   [tf.nn.l2_loss(var) for var in tf.trainable_variables()])
-        l1_loss = tf.add_n([tf.abs(var) for var in tf.trainable_variables()])
+        l1_loss = tf.add_n([tf.reduce_sum(tf.abs(var)) for var in tf.trainable_variables()])
 
         # optimizer and train step
         optimizer = tf.train.MomentumOptimizer(

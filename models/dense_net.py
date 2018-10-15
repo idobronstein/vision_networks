@@ -465,8 +465,9 @@ class DenseNet:
             print("checking varialbe {} out of {}".format(j, trainable_variables_num))
             var_size = int(reduce(lambda x, y: x*y, var.shape))
             var_reshape = tf.reshape(var, [var_size])
+            res = self.sess.run(var_reshape)
             for i in range(var_size):
-                if var_reshape[i] == 0:
+                if res[i] == 0:
                     zero_num += 1
             j += 1
             print("Zero number until know: {}".format(zero_num))

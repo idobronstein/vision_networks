@@ -1,6 +1,7 @@
 import argparse
     
 from models.dense_net import DenseNet
+from models.comprese_dense_net import CompreseDenseNet
 from data_providers.utils import get_data_provider_by_name
 
 train_params_cifar = {
@@ -49,9 +50,15 @@ if __name__ == '__main__':
         '--count_zero', action='store_true',
         help='Check the number of 0 weights is the end of the training.')
     parser.add_argument(
+        '--comprese', action='store_true',
+        help='Compressing the model by clustering the 3X3 kernels')
+    parser.add_argument(
         '--model_type', '-m', type=str, choices=['DenseNet', 'DenseNet-BC'],
         default='DenseNet',
         help='What type of model to use')
+    parser.add_argument(
+        '--clusster_num', '-c', type=int, default=12,
+        help='If compresion, state how much clster to each layer.')
     parser.add_argument(
         '--growth_rate', '-k', type=int, choices=[12, 24, 40],
         default=12,
@@ -81,7 +88,6 @@ if __name__ == '__main__':
     parser.add_argument(
         '--reduction', '-red', type=float, default=0.5, metavar='',
         help='reduction Theta at transition layer for DenseNets-BC models')
-
     parser.add_argument(
         '--logs', dest='should_save_logs', action='store_true',
         help='Write tensorflow logs')
@@ -141,6 +147,12 @@ if __name__ == '__main__':
     if args.train:
         print("Data provider train images: ", data_provider.train.num_examples)
         model.train_all_epochs(train_params)
+    if args.comprese:
+        if not args.train:
+            model.load_model()
+        print("Commpresing the network")
+        comprese_model = CompreseDenseNet(model, args.clusster_num)
+        comprese_model.comprese()
     if args.test:
         if not args.train:
             model.load_model()

@@ -279,7 +279,7 @@ class DenseNet:
         in_features = int(_input.get_shape()[-1])
         kernel = self.weight_variable_msra(
             [kernel_size, kernel_size, in_features, out_features],
-            name='kernel')
+            name='kernel'.format(size=kernel_size))
         output = tf.nn.conv2d(_input, kernel, strides, padding)
         return output
 
@@ -350,15 +350,13 @@ class DenseNet:
         cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
             logits=logits, labels=self.labels))
         self.cross_entropy = cross_entropy
-        #l2_loss = tf.add_n(
-        #   [tf.nn.l2_loss(var) for var in tf.trainable_variables()])
-        l1_loss = tf.add_n([tf.reduce_sum(tf.abs(var)) for var in tf.trainable_variables()])
+        l2_loss = tf.add_n([tf.nn.l2_loss(var) for var in tf.trainable_variables()])
 
         # optimizer and train step
         optimizer = tf.train.MomentumOptimizer(
             self.learning_rate, self.nesterov_momentum, use_nesterov=True)
         self.train_step = optimizer.minimize(
-            cross_entropy + l1_loss * self.weight_decay)
+            cross_entropy + l2_loss * self.weight_decay)
 
         correct_prediction = tf.equal(
             tf.argmax(prediction, 1),

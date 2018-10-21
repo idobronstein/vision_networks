@@ -127,8 +127,8 @@ if __name__ == '__main__':
 
     model_params = vars(args)
 
-    if not args.train and not args.test:
-        print("You should train or test your network. Please check params.")
+    if not args.train and not args.test and not args.comprese:
+        print("You should train or test or comprese your network. Please check params.")
         exit()
 
     # some default params dataset/architecture related

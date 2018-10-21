@@ -151,6 +151,7 @@ if __name__ == '__main__':
         if not args.train:
             model.load_model()
         print("Commpresing the network")
+        model.sess.close()
         comprese_model = CompreseDenseNet(model, args.clusster_num)
         comprese_model.comprese()
     if args.test:

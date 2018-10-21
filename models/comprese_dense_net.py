@@ -17,7 +17,7 @@ class CompreseDenseNet:
 		self.new_growth_rate = new_growth_rate
 		self.kmean =  tf.contrib.factorization.KMeansClustering(num_clusters=new_growth_rate, use_mini_batch=False)
 		self.graph = tf.get_default_graph()
-		self.bottleneck_output_size = self.growth_rate*4
+		self.bottleneck_output_size = self.densenet_model.growth_rate*4
 
 	def gather_all_kernels_block(self, kernel_type, block_num):
 		all_kernel = []

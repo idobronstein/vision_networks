@@ -47,9 +47,10 @@ class CompreseDenseNet:
 		cluster_centers = [np.reshape(cluster_centers_vector[k, :], [h, w, i]) for k in range(self.new_growth_rate)]
 		new_kernel_vector = np.zeros([h, w, i, self.densenet_model.growth_rate])
 		for kernel_index, cluster_index  in enumerate(cluster_indices):
-			print(abs(composite_layer_vactor[:,:,:,kernel_index] - cluster_centers[cluster_index]).sum())
+			
 			new_kernel_vector[:,:,:,kernel_index] = cluster_centers[cluster_index]
 		#return cluster_centers, cluster_indices
+		print(abs(composite_layer_vactor - new_kernel_vector).sum())
 		return new_kernel_vector
 
 	def create_orignatl_to_comprese_matrix(self, cluster_indices):
@@ -109,6 +110,6 @@ class CompreseDenseNet:
 				new_kernel_vector = self.cluster_composite_layer(composite_kernel)
 				#cluster_centers, cluster_indices = self.cluster_composite_layer(composite_kernel)
 				#o, h, w, i = new_kernel_vector.shape 
-				#new_kernel_vector = np.reshape(new_kernel_vector, [h, w, i, o])
-				new_kernels[block_num][index] = tf.convert_to_tensor(new_kernel_vector, dtype=tf.float32)
+				#new_kernel_vector = np.reshape(new_kernel_vector, [h, w, i, o]) 
+				new_kernels[index][block_num] = tf.convert_to_tensor(new_kernel_vector, dtype=tf.float32, name=composite_kernel.name[:-2] + '_new')
 		return new_kernels

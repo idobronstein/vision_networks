@@ -299,6 +299,8 @@ class DenseNet:
         if kernel is None:
             kernel = self.weight_variable_msra(
                 [kernel_size, kernel_size, in_features, out_features], name='kernel')
+        else:
+            import ipdb; ipdb.set_trace()
         output = tf.nn.conv2d(_input, kernel, strides, padding)
         return output
 

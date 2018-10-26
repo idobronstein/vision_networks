@@ -36,15 +36,21 @@ class CompreseDenseNet:
 
 	def cluster_composite_layer(self, composite_layer):
 		h, w, i, o = composite_layer.shape
-		composite_layer = tf.reshape(composite_layer, [o, h*w*i])
 		composite_layer_vactor = self.densenet_model.sess.run(composite_layer)
-		k_meas_res = self.k_means.fit(composite_layer_vactor)
+		composite_layer_vactor_move = np.moveaxis(composite_layer_vactor, -1, 0)
+		composite_layer_vactor_reshape = np.reshape(composite_layer_vactor_move, [o, h*w*i])
+		k_meas_res = self.k_means.fit(composite_layer_vactor_reshape)
 		cluster_indices = k_meas_res.labels_
 		cluster_centers_vector = k_meas_res.cluster_centers_
 		#cluster_centers = tf.convert_to_tensor(cluster_centers_vector, dtype=tf.float32)
 		#cluster_centers = tf.reshape(cluster_centers, [h, w, i, self.new_growth_rate])
-		cluster_centers = np.reshape(cluster_centers_vector, [h, w, i, self.new_growth_rate])
-		return cluster_centers, cluster_indices
+		cluster_centers = [np.reshape(cluster_centers_vector[k, :], [h, w, i]) for k in range(self.new_growth_rate)]
+		new_kernel_vector = np.zeros([h, w, i, self.densenet_model.growth_rate])
+		for kernel_index, cluster_index  in enumerate(cluster_indices):
+			print(abs(composite_layer_vactor[:,:,:,kernel_index] - cluster_centers[cluster_index]).sum())
+			new_kernel_vector[:,:,:,kernel_index] = cluster_centers[cluster_index]
+		#return cluster_centers, cluster_indices
+		return new_kernel_vector
 
 	def create_orignatl_to_comprese_matrix(self, cluster_indices):
 		assert len(cluster_indices) == self.densenet_model.growth_rate
@@ -99,9 +105,10 @@ class CompreseDenseNet:
 		for block_num in range(self.densenet_model.total_blocks): 
 			composite_kernels = self.gather_all_kernels_block('composite_function', block_num)
 			for index, composite_kernel in enumerate(composite_kernels):
-				cluster_centers, cluster_indices = self.cluster_composite_layer(composite_kernel)
-				new_kernel_vector = np.array([cluster_centers[:,:,:,j] for j in cluster_indices])
-				o, h, w, i = new_kernel_vector.shape 
-				new_kernel_vector = np.reshape(new_kernel_vector, [h, w, i, o])
-				new_kernels[block_num][index] = tf.convert_to_tensor(new_kernel_vector)
+
+				new_kernel_vector = self.cluster_composite_layer(composite_kernel)
+				#cluster_centers, cluster_indices = self.cluster_composite_layer(composite_kernel)
+				#o, h, w, i = new_kernel_vector.shape 
+				#new_kernel_vector = np.reshape(new_kernel_vector, [h, w, i, o])
+				new_kernels[block_num][index] = tf.convert_to_tensor(new_kernel_vector, dtype=tf.float32)
 		return new_kernels

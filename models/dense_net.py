@@ -13,7 +13,7 @@ TF_VERSION = float('.'.join(tf.__version__.split('.')[:2]))
 
 
 class DenseNet:
-    def __init__(self, data_provider, growth_rate, depth,
+    def __init__(self, for_test_only, init_kernels, data_provider, growth_rate, depth,
                  total_blocks, keep_prob,
                  weight_decay, nesterov_momentum, model_type, dataset,
                  should_save_logs, should_save_model,
@@ -80,6 +80,14 @@ class DenseNet:
         self.should_save_model = should_save_model
         self.renew_logs = renew_logs
         self.batches_step = 0
+
+        self.init_kernels = None
+        self.use_init_kernels = False
+        if init_kernels is not None:
+            self.init_kernels = init_kernels
+            self.use_init_kernels = True
+
+        self.for_test_only = for_test_only
 
         self._define_inputs()
         self._build_graph()
@@ -182,27 +190,31 @@ class DenseNet:
             name='learning_rate')
         self.is_training = tf.placeholder(tf.bool, shape=[])
 
-    def composite_function(self, _input, out_features, kernel_size=3):
+    def composite_function(self, _input, out_features, kernel_size=3, kernel=None):
         """Function from paper H_l that performs:
         - batch normalization
         - ReLU nonlinearity
         - convolution with required kernel
         - dropout, if required
         """
-        with tf.variable_scope("composite_function"):
+        with tf.variable_scope("composite_function", reuse=tf.AUTO_REUSE):
             # BN
             output = self.batch_norm(_input)
             # ReLU
             output = tf.nn.relu(output)
             # convolution
-            output = self.conv2d(
-                output, out_features=out_features, kernel_size=kernel_size)
+            if kernel is not None:
+                output = self.conv2d(
+                    output, out_features=out_features, kernel=kernel)
+            else:
+                output = self.conv2d(
+                    output, out_features=out_features, kernel_size=kernel_size)
             # dropout(in case of training and in case it is no 1.0)
             output = self.dropout(output)
         return output
 
     def bottleneck(self, _input, out_features):
-        with tf.variable_scope("bottleneck"):
+        with tf.variable_scope("bottleneck", reuse=tf.AUTO_REUSE):
             output = self.batch_norm(_input)
             output = tf.nn.relu(output)
             inter_features = out_features * 4
@@ -212,7 +224,7 @@ class DenseNet:
             output = self.dropout(output)
         return output
 
-    def add_internal_layer(self, _input, growth_rate):
+    def add_internal_layer(self, _input, growth_rate, kernel=None):
         """Perform H_l composite function for the layer and after concatenate
         input with output from composite function.
         """
@@ -222,8 +234,12 @@ class DenseNet:
                 _input, out_features=growth_rate, kernel_size=3)
         elif self.bc_mode:
             bottleneck_out = self.bottleneck(_input, out_features=growth_rate)
-            comp_out = self.composite_function(
-                bottleneck_out, out_features=growth_rate, kernel_size=3)
+            if kernel is not None:
+                comp_out = self.composite_function(
+                    bottleneck_out, out_features=growth_rate, kernel=kernel)
+            else:
+                comp_out = self.composite_function(
+                    bottleneck_out, out_features=growth_rate, kernel_size=3)
         # concatenate _input with out from composite function
         if TF_VERSION >= 1.0:
             output = tf.concat(axis=3, values=(_input, comp_out))
@@ -231,12 +247,15 @@ class DenseNet:
             output = tf.concat(3, (_input, comp_out))
         return output
 
-    def add_block(self, _input, growth_rate, layers_per_block):
+    def add_block(self, _input, growth_rate, layers_per_block, init_kernels=None):
         """Add N H_l internal layers"""
         output = _input
         for layer in range(layers_per_block):
             with tf.variable_scope("layer_%d" % layer):
-                output = self.add_internal_layer(output, growth_rate)
+                if init_kernels: 
+                    output = self.add_internal_layer(output, growth_rate, init_kernels[layer])
+                else:
+                    output = self.add_internal_layer(output, growth_rate)
         return output
 
     def transition_layer(self, _input):
@@ -274,12 +293,12 @@ class DenseNet:
         logits = tf.matmul(output, W) + bias
         return logits
 
-    def conv2d(self, _input, out_features, kernel_size,
-               strides=[1, 1, 1, 1], padding='SAME'):
+    def conv2d(self, _input, out_features, kernel_size=0,
+               strides=[1, 1, 1, 1], padding='SAME', kernel=None):
         in_features = int(_input.get_shape()[-1])
-        kernel = self.weight_variable_msra(
-            [kernel_size, kernel_size, in_features, out_features],
-            name='kernel'.format(size=kernel_size))
+        if kernel is None:
+            kernel = self.weight_variable_msra(
+                [kernel_size, kernel_size, in_features, out_features], name='kernel')
         output = tf.nn.conv2d(_input, kernel, strides, padding)
         return output
 
@@ -327,7 +346,7 @@ class DenseNet:
         growth_rate = self.growth_rate
         layers_per_block = self.layers_per_block
         # first - initial 3 x 3 conv to first_output_features
-        with tf.variable_scope("Initial_convolution"):
+        with tf.variable_scope("Initial_convolution",  reuse=tf.AUTO_REUSE):
             output = self.conv2d(
                 self.images,
                 out_features=self.first_output_features,
@@ -335,14 +354,17 @@ class DenseNet:
 
         # add N required blocks
         for block in range(self.total_blocks):
-            with tf.variable_scope("Block_%d" % block):
-                output = self.add_block(output, growth_rate, layers_per_block)
+            with tf.variable_scope("Block_%d" % block,  reuse=tf.AUTO_REUSE):
+                if self.use_init_kernels:
+                    output = self.add_block(output, growth_rate, layers_per_block, self.init_kernels[:][block])
+                else:
+                    output = self.add_block(output, growth_rate, layers_per_block)
             # last block exist without transition layer
             if block != self.total_blocks - 1:
-                with tf.variable_scope("Transition_after_block_%d" % block):
+                with tf.variable_scope("Transition_after_block_%d" % block, reuse=tf.AUTO_REUSE):
                     output = self.transition_layer(output)
 
-        with tf.variable_scope("Transition_to_classes"):
+        with tf.variable_scope("Transition_to_classes", reuse=tf.AUTO_REUSE):
             logits = self.transition_layer_to_classes(output)
         prediction = tf.nn.softmax(logits)
 
@@ -351,13 +373,14 @@ class DenseNet:
             logits=logits, labels=self.labels))
         self.cross_entropy = cross_entropy
         l2_loss = tf.add_n([tf.nn.l2_loss(var) for var in tf.trainable_variables()])
-
-        # optimizer and train step
-        optimizer = tf.train.MomentumOptimizer(
-            self.learning_rate, self.nesterov_momentum, use_nesterov=True)
-        self.train_step = optimizer.minimize(
-            cross_entropy + l2_loss * self.weight_decay)
-
+        
+        if not self.for_test_only:    
+            # optimizer and train step
+            optimizer = tf.train.MomentumOptimizer(
+                self.learning_rate, self.nesterov_momentum, use_nesterov=True)
+            self.train_step = optimizer.minimize(
+                cross_entropy + l2_loss * self.weight_decay)
+    
         correct_prediction = tf.equal(
             tf.argmax(prediction, 1),
             tf.argmax(self.labels, 1))
@@ -471,3 +494,5 @@ class DenseNet:
             print("Zero number until know: {}".format(zero_num))
         return zero_num
 
+    def close(self):
+        self.sess.close()

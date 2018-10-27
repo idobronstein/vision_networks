@@ -176,7 +176,6 @@ if __name__ == '__main__':
                 init_global.append(var_vector)
         model.close()
         model = DenseNet(for_test_only=True, init_variables=init_variables, init_global=init_global, data_provider=data_provider, **model_params)
-        #import ipdb; ipdb.set_trace()
         new_varaible = model.get_trainable_variables_value()
         for i in range(len(old_varaible)):
             diff = abs(new_varaible[i] - old_varaible[i]).sum()

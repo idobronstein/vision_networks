@@ -342,8 +342,14 @@ class DenseNet:
         return var
 
     def bias_variable(self, shape, name='bias'):
-        initial = tf.constant(0.0, shape=shape)
-        return tf.get_variable(name, initializer=initial)
+        if self.init_variables:
+            bias = tf.get_variable(name, initializer=tf.convert_to_tensor(self.init_variables[self.init_variables_position][0]))
+            self.init_variables_position += 1
+        else:
+            initial = tf.constant(0.0, shape=shape)
+            bias = tf.get_variable(name, initializer=initial)
+        return bias
+
 
     def _build_graph(self):
         growth_rate = self.growth_rate

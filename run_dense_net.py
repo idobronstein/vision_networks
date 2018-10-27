@@ -3,6 +3,9 @@ import argparse
 from models.dense_net import DenseNet
 from models.comprese_dense_net import CompreseDenseNet
 from data_providers.utils import get_data_provider_by_name
+import tensorflow as tf
+import numpy as np
+import re
 
 train_params_cifar = {
     'batch_size': 64,
@@ -28,6 +31,7 @@ train_params_svhn = {
     'normalization': 'divide_255',
 }
 
+COMPOSITE_NAME_REGEX = re.compile('(Block_)(\d)(/layer_)(\d)(/composite_function/kernel:0)')
 
 def get_train_params_by_name(name):
     if name in ['C10', 'C10+', 'C100', 'C100+']:
@@ -143,18 +147,40 @@ if __name__ == '__main__':
     print("Prepare training data...")
     data_provider = get_data_provider_by_name(args.dataset, train_params)
     print("Initialize the model..")
-    model = DenseNet(for_test_only=False, init_kernels=None, data_provider=data_provider, **model_params)
+    model = DenseNet(for_test_only=False, init_variables=None, init_global=None, data_provider=data_provider, **model_params)
     if args.train:
         print("Data provider train images: ", data_provider.train.num_examples)
         model.train_all_epochs(train_params)
     if args.comprese:
         if not args.train:
             model.load_model()
+        old_varaible = model.get_trainable_variables_value()
         print("Commpresing the network")
+        #import ipdb; ipdb.set_trace()
         comprese_model = CompreseDenseNet(model, args.clusster_num)
         cluster_kernels = comprese_model.cluster()
+        init_variables = []
+        for var in tf.trainable_variables():
+            composite_match = COMPOSITE_NAME_REGEX.match(var.name)
+            if composite_match:
+                block_index = int(composite_match.groups()[1])
+                layer_index = int(composite_match.groups()[3])
+                init_variables.append((np.float32(cluster_kernels[block_index][layer_index]), var.name))
+            else:
+                var_vector = np.float32(model.sess.run(var))
+                init_variables.append((var_vector, var.name))
+        init_global = []
+        for var in tf.global_variables():
+            if 'moving' in var.name:
+                var_vector = np.float32(model.sess.run(var))
+                init_global.append(var_vector)
         model.close()
-        model = model = DenseNet(for_test_only=True, init_kernels=cluster_kernels, data_provider=data_provider, **model_params)
+        model = DenseNet(for_test_only=True, init_variables=init_variables, init_global=init_global, data_provider=data_provider, **model_params)
+        #import ipdb; ipdb.set_trace()
+        new_varaible = model.get_trainable_variables_value()
+        for i in range(len(old_varaible)):
+            diff = abs(new_varaible[i] - old_varaible[i]).sum()
+            print("diffrent {index} is: {diff}".format(index=i, diff=diff) )
     if args.test:
         if not args.train and not args.comprese:
             model.load_model()

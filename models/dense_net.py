@@ -13,7 +13,7 @@ TF_VERSION = float('.'.join(tf.__version__.split('.')[:2]))
 
 
 class DenseNet:
-    def __init__(self, for_test_only, init_kernels, data_provider, growth_rate, depth,
+    def __init__(self, for_test_only, init_variables, init_global, data_provider, growth_rate, depth,
                  total_blocks, keep_prob,
                  weight_decay, nesterov_momentum, model_type, dataset,
                  should_save_logs, should_save_model,
@@ -81,12 +81,10 @@ class DenseNet:
         self.renew_logs = renew_logs
         self.batches_step = 0
 
-        self.init_kernels = None
-        self.use_init_kernels = False
-        if init_kernels is not None:
-            self.init_kernels = init_kernels
-            self.use_init_kernels = True
-
+        self.init_variables = init_variables
+        self.init_variables_position = 0
+        self.init_global = init_global
+        self.init_global_position = 0
         self.for_test_only = for_test_only
 
         self._define_inputs()
@@ -234,12 +232,7 @@ class DenseNet:
                 _input, out_features=growth_rate, kernel_size=3)
         elif self.bc_mode:
             bottleneck_out = self.bottleneck(_input, out_features=growth_rate)
-            if kernel is not None:
-                comp_out = self.composite_function(
-                    bottleneck_out, out_features=growth_rate, kernel=kernel)
-            else:
-                comp_out = self.composite_function(
-                    bottleneck_out, out_features=growth_rate, kernel_size=3)
+            comp_out = self.composite_function(bottleneck_out, out_features=growth_rate, kernel_size=3)
         # concatenate _input with out from composite function
         if TF_VERSION >= 1.0:
             output = tf.concat(axis=3, values=(_input, comp_out))
@@ -252,10 +245,7 @@ class DenseNet:
         output = _input
         for layer in range(layers_per_block):
             with tf.variable_scope("layer_%d" % layer):
-                if init_kernels: 
-                    output = self.add_internal_layer(output, growth_rate, init_kernels[layer])
-                else:
-                    output = self.add_internal_layer(output, growth_rate)
+                output = self.add_internal_layer(output, growth_rate)
         return output
 
     def transition_layer(self, _input):
@@ -294,13 +284,9 @@ class DenseNet:
         return logits
 
     def conv2d(self, _input, out_features, kernel_size=0,
-               strides=[1, 1, 1, 1], padding='SAME', kernel=None):
+               strides=[1, 1, 1, 1], padding='SAME'):
         in_features = int(_input.get_shape()[-1])
-        if kernel is None:
-            kernel = self.weight_variable_msra(
-                [kernel_size, kernel_size, in_features, out_features], name='kernel')
-        else:
-            print(kernel.name)
+        kernel = self.weight_variable_msra([kernel_size, kernel_size, in_features, out_features], name='kernel')
         output = tf.nn.conv2d(_input, kernel, strides, padding)
         return output
 
@@ -312,9 +298,20 @@ class DenseNet:
         return output
 
     def batch_norm(self, _input):
-        output = tf.contrib.layers.batch_norm(
-            _input, scale=True, is_training=self.is_training,
-            updates_collections=None)
+        if self.init_variables_position:
+            param_initializers={
+                'beta': tf.convert_to_tensor(self.init_variables[self.init_variables_position][0]),
+                'gamma': tf.convert_to_tensor(self.init_variables[self.init_variables_position+1][0]),
+                'moving_mean': tf.convert_to_tensor(self.init_global[self.init_global_position]),
+                'moving_variance': tf.convert_to_tensor(self.init_global[self.init_global_position+1]), 
+            }
+            self.init_variables_position += 2
+            self.init_global_position += 2
+            output = tf.contrib.layers.batch_norm(_input, scale=True, is_training=self.is_training,
+                updates_collections=None, param_initializers=param_initializers)
+        else:
+            output = tf.contrib.layers.batch_norm(_input, scale=True, is_training=self.is_training,
+                updates_collections=None)
         return output
 
     def dropout(self, _input):
@@ -329,16 +326,20 @@ class DenseNet:
         return output
 
     def weight_variable_msra(self, shape, name):
-        return tf.get_variable(
-            name=name,
-            shape=shape,
-            initializer=tf.contrib.layers.variance_scaling_initializer())
+        if self.init_variables:
+            var = tf.get_variable(name=name, initializer=tf.convert_to_tensor(self.init_variables[self.init_variables_position][0]))
+            self.init_variables_position += 1
+        else:
+            var = tf.get_variable(name=name, shape=shape, initializer=tf.contrib.layers.variance_scaling_initializer())
+        return var
 
     def weight_variable_xavier(self, shape, name):
-        return tf.get_variable(
-            name,
-            shape=shape,
-            initializer=tf.contrib.layers.xavier_initializer())
+        if self.init_variables:
+            var = tf.get_variable(name=name, initializer=tf.convert_to_tensor(self.init_variables[self.init_variables_position][0]))
+            self.init_variables_position += 1
+        else:
+            var = tf.get_variable(name=name, shape=shape, initializer=tf.contrib.layers.xavier_initializer())
+        return var
 
     def bias_variable(self, shape, name='bias'):
         initial = tf.constant(0.0, shape=shape)
@@ -349,6 +350,7 @@ class DenseNet:
         layers_per_block = self.layers_per_block
         # first - initial 3 x 3 conv to first_output_features
         with tf.variable_scope("Initial_convolution",  reuse=tf.AUTO_REUSE):
+            #import ipdb; ipdb.set_trace()
             output = self.conv2d(
                 self.images,
                 out_features=self.first_output_features,
@@ -357,10 +359,7 @@ class DenseNet:
         # add N required blocks
         for block in range(self.total_blocks):
             with tf.variable_scope("Block_%d" % block,  reuse=tf.AUTO_REUSE):
-                if self.use_init_kernels:
-                    output = self.add_block(output, growth_rate, layers_per_block, self.init_kernels[block])
-                else:
-                    output = self.add_block(output, growth_rate, layers_per_block)
+                output = self.add_block(output, growth_rate, layers_per_block)
             # last block exist without transition layer
             if block != self.total_blocks - 1:
                 with tf.variable_scope("Transition_after_block_%d" % block, reuse=tf.AUTO_REUSE):
@@ -498,3 +497,14 @@ class DenseNet:
 
     def close(self):
         self.sess.close()
+        tf.reset_default_graph()
+
+    def get_trainable_variables_value(self):
+        trainable_variables = tf.trainable_variables()
+        trainable_variables_value = self.sess.run(trainable_variables)
+        return trainable_variables_value
+
+
+
+
+

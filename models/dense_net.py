@@ -300,7 +300,7 @@ class DenseNet:
             kernel = self.weight_variable_msra(
                 [kernel_size, kernel_size, in_features, out_features], name='kernel')
         else:
-            pass
+            print(kernel.name)
         output = tf.nn.conv2d(_input, kernel, strides, padding)
         return output
 

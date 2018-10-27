@@ -107,8 +107,9 @@ class CompreseDenseNet:
 		for block_num in range(self.densenet_model.total_blocks): 
 			block_new_kernels = []
 			composite_kernels = self.gather_all_kernels_block('composite_function', block_num)
-			for index, composite_kernel in enumerate(composite_kernels):
-				new_kernel_vector = self.cluster_composite_layer(composite_kernel)
-				block_new_kernels.append(tf.convert_to_tensor(new_kernel_vector, dtype=tf.float32, name=composite_kernel.name[:-2] + '_new'))
+			for composite_kernel in composite_kernels:
+				#new_kernel_vector = self.cluster_composite_layer(composite_kernel)
+				#block_new_kernels.append(tf.convert_to_tensor(new_kernel_vector, dtype=tf.float32, name=composite_kernel.name[:-2] + '_new'))
+				block_new_kernels.append(composite_kernel)
 			all_new_kernels.append(block_new_kernels)
 		return all_new_kernels

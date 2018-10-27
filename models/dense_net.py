@@ -300,7 +300,7 @@ class DenseNet:
             kernel = self.weight_variable_msra(
                 [kernel_size, kernel_size, in_features, out_features], name='kernel')
         else:
-            import ipdb; ipdb.set_trace()
+            pass
         output = tf.nn.conv2d(_input, kernel, strides, padding)
         return output
 
@@ -358,7 +358,7 @@ class DenseNet:
         for block in range(self.total_blocks):
             with tf.variable_scope("Block_%d" % block,  reuse=tf.AUTO_REUSE):
                 if self.use_init_kernels:
-                    output = self.add_block(output, growth_rate, layers_per_block, self.init_kernels[:][block])
+                    output = self.add_block(output, growth_rate, layers_per_block, self.init_kernels[block])
                 else:
                     output = self.add_block(output, growth_rate, layers_per_block)
             # last block exist without transition layer

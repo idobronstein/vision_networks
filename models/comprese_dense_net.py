@@ -107,7 +107,7 @@ class CompreseDenseNet:
 		for i in range(layer_num):
 			start_index = i*self.densenet_model.growth_rate
 			bottleneck_kernel_slice = bottleneck_kernel_vector[:, :, start_index : start_index + self.densenet_model.growth_rate, :]
-			adjust_bottleneck_slice = np.tensordot(original_to_comprese[i], bottleneck_kernel_slice, (1, 2))
+			adjust_bottleneck_slice = np.tensordot(original_to_comprese[(layer_num - 1) - i], bottleneck_kernel_slice, (1, 2))
 			adjust_bottleneck_slice = np.moveaxis(adjust_bottleneck_slice, 0, 2)
 			if i == 0:
 				adjust_bottleneck = adjust_bottleneck_slice
@@ -116,7 +116,6 @@ class CompreseDenseNet:
 
 		from_uncahnge_input =  bottleneck_kernel_vector[:, :, start_index + self.densenet_model.growth_rate : , :]
 		adjust_bottleneck = np.concatenate((adjust_bottleneck, from_uncahnge_input), axis=2)
-		
 		return adjust_bottleneck
 
 	def adjust_batch_norm(self, batch_norm, original_to_comprese, layer_num):
@@ -128,7 +127,7 @@ class CompreseDenseNet:
 			for i in range(layer_num):
 				start_index = i*self.densenet_model.growth_rate
 				param_slice = param[start_index : start_index + self.densenet_model.growth_rate]
-				adjust_param_slice = np.tensordot(original_to_comprese[i], param_slice, (1, 0))
+				adjust_param_slice = np.tensordot(original_to_comprese[(layer_num - 1) - i], param_slice, (1, 0))
 				if i == 0:
 					adjust_param = adjust_param_slice
 				else:
@@ -145,7 +144,7 @@ class CompreseDenseNet:
 		for i in range(layer_num):
 			start_index = i*self.densenet_model.growth_rate
 			W_slice = W_vector[start_index : start_index + self.densenet_model.growth_rate, :]
-			adjust_W_slice = np.tensordot(original_to_comprese[i], W_slice, (1, 0))
+			adjust_W_slice = np.tensordot(original_to_comprese[(layer_num - 1) - i], W_slice, (1, 0))
 			if i == 0:
 				adjust_W = adjust_W_slice
 			else:

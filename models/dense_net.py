@@ -331,7 +331,6 @@ class DenseNet:
 
     def weight_variable_msra(self, shape, name):
         if self.init_variables:
-            #import ipdb; ipdb.set_trace()
             var = tf.get_variable(name=name, initializer=tf.convert_to_tensor(self.init_variables[self.init_variables_position][0]))
             self.init_variables_position += 1
         else:

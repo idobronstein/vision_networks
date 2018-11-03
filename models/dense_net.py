@@ -380,13 +380,12 @@ class DenseNet:
             logits=logits, labels=self.labels))
         self.cross_entropy = cross_entropy
         l2_loss = tf.add_n([tf.nn.l2_loss(var) for var in tf.trainable_variables()])
-        
-        if not self.for_test_only:    
-            # optimizer and train step
-            optimizer = tf.train.MomentumOptimizer(
-                self.learning_rate, self.nesterov_momentum, use_nesterov=True)
-            self.train_step = optimizer.minimize(
-                cross_entropy + l2_loss * self.weight_decay)
+          
+        # optimizer and train step
+        optimizer = tf.train.MomentumOptimizer(
+            self.learning_rate, self.nesterov_momentum, use_nesterov=True)
+        self.train_step = optimizer.minimize(
+            cross_entropy + l2_loss * self.weight_decay)
     
         correct_prediction = tf.equal(
             tf.argmax(prediction, 1),

@@ -88,16 +88,18 @@ class CompreseDenseNet:
 		k_meas_res = self.k_means.fit(composite_layer_vactor_reshape)
 		cluster_indices = k_meas_res.labels_
 		cluster_centers_vector = k_meas_res.cluster_centers_
-		cluster_centers = [np.reshape(cluster_centers_vector[k], [h, w, i]) for k in cluster_indices]
-		#cluster_centers = [np.reshape(cluster_centers_vector[k], [h, w, i]) for k in range(self.new_growth_rate)]
+		#cluster_centers = [np.reshape(cluster_centers_vector[k], [h, w, i]) for k in cluster_indices]
+		cluster_centers = [np.reshape(cluster_centers_vector[k], [h, w, i]) for k in range(self.new_growth_rate)]
 		cluster_centers = np.moveaxis(cluster_centers, 0, 3)
-		cluster_indices = range(12)
+		#cluster_indices = range(12)
 		return cluster_centers, cluster_indices
 
 	def create_orignatl_to_comprese_matrix(self, cluster_indices):
 		OtC = np.zeros((self.new_growth_rate, self.densenet_model.growth_rate))
-		for i in cluster_indices:
-			OtC[cluster_indices[i],[i]] = 1
+		for cluster_num in range(self.new_growth_rate):
+			for index in range(self.densenet_model.growth_rate):
+				if cluster_num == cluster_indices[index]:
+					OtC[cluster_num, index] = 1
 		return OtC
 
 	def adjust_bottleneck_kernel(self, bottleneck_kernel, original_to_comprese, layer_num):

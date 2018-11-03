@@ -128,6 +128,7 @@ class CompreseDenseNet:
 					start_index = k0 + j*self.densenet_model.growth_rate
 					param_slice = param[start_index : start_index + self.densenet_model.growth_rate]
 					adjust_param_slice = np.tensordot(original_to_comprese[j], param_slice ,(1, 0))
+					adjust_param_slice = (1 / original_to_comprese[j].sum()) * adjust_param_slice
 					adjust_param = np.concatenate((adjust_param, adjust_param_slice), axis=0)
 			new_batch_norm_vector.append(adjust_param)
 		return new_batch_norm_vector

@@ -150,8 +150,8 @@ class DenseNet:
 
     @property
     def model_identifier(self):
-        return "{}_growth_rate={}_depth={}_dataset_{}_noBN".format(
-            self.model_type, self.growth_rate, self.depth, self.dataset_name)
+        return "{}_growth_rate={}_depth={}_dataset_{}".format(
+            self.model_type, self.growth_rate, self.depth, self.dataset_name, self.weight_decay)
 
     def save_model(self, global_step=None):
         self.saver.save(self.sess, self.save_path, global_step=global_step)
@@ -300,8 +300,6 @@ class DenseNet:
         return output
 
     def batch_norm(self, _input):
-        return _input
-        '''
         if self.init_variables_position:
             param_initializers={
                 'beta': tf.convert_to_tensor(self.init_variables[self.init_variables_position][0]),
@@ -317,7 +315,6 @@ class DenseNet:
             output = tf.contrib.layers.batch_norm(_input, scale=True, is_training=self.is_training,
                 updates_collections=None)
         return output
-        '''
 
     def dropout(self, _input):
         if self.keep_prob < 1:

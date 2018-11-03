@@ -163,6 +163,7 @@ if __name__ == '__main__':
         if not args.train:
             model.load_model()
         old_varaible = model.get_trainable_variables_value()
+        old_param_num = model.total_parameters
         print("Commpresing the network")
         comprese_model = CompreseDenseNet(model, args.clusster_num)
         all_new_comprese_kernels, all_new_bottleneck_kernels, all_new_batch_norm, all_new_transion_kernels, all_new_batch_norm_for_transion, new_W, new_transion_to_class_batch_norm = comprese_model.comprese()
@@ -249,8 +250,10 @@ if __name__ == '__main__':
         model_params['reduce_lr_epoch_2'] = 40
         model_params['should_save_model'] = False
         model = DenseNet(for_test_only=True, init_variables=init_variables, init_global=init_global, bottleneck_output_size=4*args.growth_rate ,first_output_features=2*args.growth_rate,data_provider=data_provider, **model_params)
-        print("Data provider train images: ", data_provider.train.num_examples)
+        new_param_num = model.total_parameters
+        print("The comprese rate is: {}".format((1 - (new_param_num / old_param_num)) * 100))
         if args.train_again:
+            print("Data provider train images: ", data_provider.train.num_examples)
             model.train_all_epochs(train_params)
     if args.test:
         if not args.train and not args.comprese:

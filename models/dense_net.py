@@ -123,6 +123,7 @@ class DenseNet:
             for dim in shape:
                 variable_parametes *= dim.value
             total_parameters += variable_parametes
+        self.total_parameters = total_parameters
         print("Total training params: %.1fM" % (total_parameters / 1e6))
 
     @property

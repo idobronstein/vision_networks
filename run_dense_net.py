@@ -72,7 +72,7 @@ if __name__ == '__main__':
         '--clusster_num', '-c', type=int, default=12,
         help='If compresion, state how much clster to each layer.')
     parser.add_argument(
-        '--growth_rate', '-k', type=int, choices=[12, 24, 40],
+        '--growth_rate', '-k', type=int,
         default=12,
         help='Grows rate for every layer, '
              'choices were restricted to used in paper')

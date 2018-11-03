@@ -152,7 +152,7 @@ if __name__ == '__main__':
     print("Prepare training data...")
     data_provider = get_data_provider_by_name(args.dataset, train_params)
     print("Initialize the model..")
-    model = DenseNet(for_test_only=False, init_variables=None, init_global=None, bottleneck_output_size=None, data_provider=data_provider, **model_params)
+    model = DenseNet(for_test_only=False, init_variables=None, init_global=None, bottleneck_output_size=None, first_output_features=None, data_provider=data_provider, **model_params)
     if args.train:
         print("Data provider train images: ", data_provider.train.num_examples)
         model.train_all_epochs(train_params)
@@ -240,11 +240,11 @@ if __name__ == '__main__':
                     init_global.append((var_vector, var.name))
         model.close()
         model_params['growth_rate'] = args.clusster_num
-        model = DenseNet(for_test_only=True, init_variables=init_variables, init_global=init_global, bottleneck_output_size=4*args.growth_rate ,data_provider=data_provider, **model_params)
+        model = DenseNet(for_test_only=True, init_variables=init_variables, init_global=init_global, bottleneck_output_size=4*args.growth_rate ,first_output_features=2*args.growth_rate,data_provider=data_provider, **model_params)
         new_varaible = model.get_trainable_variables_value()
         if len(old_varaible) == len(new_varaible):
             for i in range(len(old_varaible)):
-                diff = abs(new_varaible[i] - old_varaible[i]).sum()
+                diff = new_varaible[i].sum() - old_varaible[i].sum()
                 print("diffrent {index} is: {diff}".format(index=i, diff=diff) )
     if args.test:
         if not args.train and not args.comprese:

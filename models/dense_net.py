@@ -10,10 +10,10 @@ import tensorflow as tf
 
 
 TF_VERSION = float('.'.join(tf.__version__.split('.')[:2]))
-
+FLAG = True
 
 class DenseNet:
-    def __init__(self, for_test_only, init_variables, init_global, bottleneck_output_size, data_provider, growth_rate, depth,
+    def __init__(self, for_test_only, init_variables, init_global, bottleneck_output_size, first_output_features, data_provider, growth_rate, depth,
                  total_blocks, keep_prob,
                  weight_decay, nesterov_momentum, model_type, dataset,
                  should_save_logs, should_save_model,
@@ -53,7 +53,10 @@ class DenseNet:
         self.growth_rate = growth_rate
         # how many features will be received after first convolution
         # value the same as in the original Torch code
-        self.first_output_features = growth_rate * 2
+        if not first_output_features:
+            self.first_output_features = growth_rate * 2
+        else: 
+            self.first_output_features = first_output_features
         self.total_blocks = total_blocks
         self.layers_per_block = (depth - (total_blocks + 1)) // total_blocks
         self.bc_mode = bc_mode
@@ -192,7 +195,7 @@ class DenseNet:
             name='learning_rate')
         self.is_training = tf.placeholder(tf.bool, shape=[])
 
-    def composite_function(self, _input, out_features, kernel_size=3, kernel=None):
+    def composite_function(self, _input, out_features, kernel_size=3):
         """Function from paper H_l that performs:
         - batch normalization
         - ReLU nonlinearity
@@ -205,12 +208,7 @@ class DenseNet:
             # ReLU
             output = tf.nn.relu(output)
             # convolution
-            if kernel is not None:
-                output = self.conv2d(
-                    output, out_features=out_features, kernel=kernel)
-            else:
-                output = self.conv2d(
-                    output, out_features=out_features, kernel_size=kernel_size)
+            output = self.conv2d(output, out_features=out_features, kernel_size=kernel_size)
             # dropout(in case of training and in case it is no 1.0)
             output = self.dropout(output)
         return output

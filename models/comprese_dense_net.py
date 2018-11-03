@@ -10,6 +10,7 @@ import tensorflow as tf
 from sklearn.cluster import KMeans
 
 K_MEANS_ITERATION_NUM = 20
+K0 = [24, 108, 150]
 
 class CompreseDenseNet:
 	def __init__(self, densenet_model, new_growth_rate):
@@ -102,60 +103,45 @@ class CompreseDenseNet:
 					OtC[cluster_num, index] = 1
 		return OtC
 
-	def adjust_bottleneck_kernel(self, bottleneck_kernel, original_to_comprese, layer_num):
-		bottleneck_kernel_vector = self.densenet_model.sess.run(bottleneck_kernel)
-		
-		if layer_num == 0:
-			return bottleneck_kernel_vector
-		
-		for i in range(layer_num):
-			start_index = i*self.densenet_model.growth_rate
-			bottleneck_kernel_slice = bottleneck_kernel_vector[:, :, start_index : start_index + self.densenet_model.growth_rate, :]
-			adjust_bottleneck_slice = np.tensordot(original_to_comprese[(layer_num - 1) - i], bottleneck_kernel_slice, (1, 2))
-			adjust_bottleneck_slice = np.moveaxis(adjust_bottleneck_slice, 0, 2)
-			if i == 0:
-				adjust_bottleneck = adjust_bottleneck_slice
-			else:
-				adjust_bottleneck = np.concatenate((adjust_bottleneck, adjust_bottleneck_slice), axis=2)
 
-		from_uncahnge_input =  bottleneck_kernel_vector[:, :, start_index + self.densenet_model.growth_rate : , :]
-		adjust_bottleneck = np.concatenate((adjust_bottleneck, from_uncahnge_input), axis=2)
+	def adjust_bottleneck_kernel(self, bottleneck_kernel, original_to_comprese, k0, layer_num):
+		bottleneck_kernel_vector = self.densenet_model.sess.run(bottleneck_kernel)
+		# don't touch k0 first params
+		adjust_bottleneck = bottleneck_kernel_vector[:, :, :k0, :]
+		if not layer_num == 0:
+			for j in range(layer_num):
+				start_index = k0 + j*self.densenet_model.growth_rate
+				bottleneck_kernel_slice = bottleneck_kernel_vector[:, :, start_index : start_index + self.densenet_model.growth_rate, :]
+				adjust_bottleneck_slice = np.tensordot(original_to_comprese[j], bottleneck_kernel_slice ,(1, 2))
+				adjust_bottleneck_slice = np.moveaxis(adjust_bottleneck_slice, 0, 2)
+				adjust_bottleneck = np.concatenate((adjust_bottleneck, adjust_bottleneck_slice), axis=2)
 		return adjust_bottleneck
 
-	def adjust_batch_norm(self, batch_norm, original_to_comprese, layer_num):
+	def adjust_batch_norm(self, batch_norm, original_to_comprese, k0, layer_num):
 		batch_norm_vector = self.densenet_model.sess.run(batch_norm)
-		if layer_num == 0:
-			return batch_norm_vector
+		# don't touch k0 first params
 		new_batch_norm_vector = []
 		for param in batch_norm_vector:
-			for i in range(layer_num):
-				start_index = i*self.densenet_model.growth_rate
-				param_slice = param[start_index : start_index + self.densenet_model.growth_rate]
-				adjust_param_slice = np.tensordot(original_to_comprese[(layer_num - 1) - i], param_slice, (1, 0))
-				if i == 0:
-					adjust_param = adjust_param_slice
-				else:
+			adjust_param = param[:k0]
+			if not layer_num == 0:
+				for j in range(layer_num):
+					start_index = k0 + j*self.densenet_model.growth_rate
+					param_slice = param[start_index : start_index + self.densenet_model.growth_rate]
+					adjust_param_slice = np.tensordot(original_to_comprese[j], param_slice ,(1, 0))
 					adjust_param = np.concatenate((adjust_param, adjust_param_slice), axis=0)
-			from_uncahnge_input =  param[start_index + self.densenet_model.growth_rate :]
-			adjust_param = np.concatenate((adjust_param, from_uncahnge_input), axis=0)
 			new_batch_norm_vector.append(adjust_param)
-
 		return new_batch_norm_vector
 
-	def adjust_W(self, W, original_to_comprese, layer_num):
+	def adjust_W(self, W, original_to_comprese, k0, layer_num):
 		W_vector = self.densenet_model.sess.run(W)
-		if layer_num == 0:
-			return W_vector
-		for i in range(layer_num):
-			start_index = i*self.densenet_model.growth_rate
-			W_slice = W_vector[start_index : start_index + self.densenet_model.growth_rate, :]
-			adjust_W_slice = np.tensordot(original_to_comprese[(layer_num - 1) - i], W_slice, (1, 0))
-			if i == 0:
-				adjust_W = adjust_W_slice
-			else:
+		# don't touch k0 first params
+		adjust_W = W_vector[:k0, :]
+		if not layer_num == 0:
+			for j in range(layer_num):
+				start_index = k0 + j*self.densenet_model.growth_rate
+				W_slice = W_vector[start_index : start_index + self.densenet_model.growth_rate, :]
+				adjust_W_slice = np.tensordot(original_to_comprese[j], W_slice ,(1, 0))
 				adjust_W = np.concatenate((adjust_W, adjust_W_slice), axis=0)
-		from_uncahnge_input =  W_vector[start_index + self.densenet_model.growth_rate :, :]
-		adjust_W = np.concatenate((adjust_W, from_uncahnge_input), axis=0)
 		return adjust_W
 
 	def comprese(self):
@@ -165,6 +151,7 @@ class CompreseDenseNet:
 		all_new_transion_kernels = []
 		all_new_batch_norm_for_transion = []
 		for block_num in range(self.densenet_model.total_blocks): 
+			k0 = K0[block_num]
 			# calc comprese composite kernels
 			composite_kernels = self.gather_all_kernels_block('composite_function', block_num)
 			block_new_composite_kernels = []
@@ -182,8 +169,8 @@ class CompreseDenseNet:
 			block_new_bottleneck_kernels = []
 			block_new_batch_norm = []
 			for i in range(len(bottleneck_kernels)):
-				block_new_bottleneck_kernels.append(self.adjust_bottleneck_kernel(bottleneck_kernels[i], original_to_comprese, i))
-				block_new_batch_norm.append(self.adjust_batch_norm(bottleneck_batch_norm[i], original_to_comprese, i))
+				block_new_bottleneck_kernels.append(self.adjust_bottleneck_kernel(bottleneck_kernels[i], original_to_comprese, k0, i))
+				block_new_batch_norm.append(self.adjust_batch_norm(bottleneck_batch_norm[i], original_to_comprese, k0, i))
 			all_new_bottleneck_kernels.append(block_new_bottleneck_kernels)
 			all_new_batch_norm.append(block_new_batch_norm)
 
@@ -191,13 +178,13 @@ class CompreseDenseNet:
 				# calc new transition layer
 				transion_layer = self.get_transition_kernel(block_num)
 				transion_batch_norm = self.get_transition_batch_norm(block_num)
-				all_new_transion_kernels.append(self.adjust_bottleneck_kernel(transion_layer, original_to_comprese, len(bottleneck_kernels)))
-				all_new_batch_norm_for_transion.append(self.adjust_batch_norm(transion_batch_norm, original_to_comprese, len(bottleneck_kernels)))
+				all_new_transion_kernels.append(self.adjust_bottleneck_kernel(transion_layer, original_to_comprese, k0, len(bottleneck_kernels)))
+				all_new_batch_norm_for_transion.append(self.adjust_batch_norm(transion_batch_norm, original_to_comprese, k0, len(bottleneck_kernels)))
 			else:
 				W = self.graph.get_tensor_by_name('Transition_to_classes/W:0')
 				transion_to_class_batch_norm = self.get_tansition_to_classes_batch_norm()
-				new_W = self.adjust_W(W, original_to_comprese, len(bottleneck_kernels))
-				new_transion_to_class_batch_norm = self.adjust_batch_norm(transion_to_class_batch_norm, original_to_comprese, len(bottleneck_kernels))
+				new_W = self.adjust_W(W, original_to_comprese, k0, len(bottleneck_kernels))
+				new_transion_to_class_batch_norm = self.adjust_batch_norm(transion_to_class_batch_norm, original_to_comprese, k0, len(bottleneck_kernels))
 
 		return all_new_comprese_kernels, all_new_bottleneck_kernels, all_new_batch_norm, all_new_transion_kernels, all_new_batch_norm_for_transion, new_W, new_transion_to_class_batch_norm
 

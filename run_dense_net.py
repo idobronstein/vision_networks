@@ -51,6 +51,9 @@ if __name__ == '__main__':
         '--train', action='store_true',
         help='Train the model')
     parser.add_argument(
+        '--train_again', action='store_true',
+        help='Train the model again after clustering')
+    parser.add_argument(
         '--test', action='store_true',
         help='Test model for required dataset if pretrained model exists.'
              'If provided together with `--train` flag testing will be'
@@ -247,7 +250,8 @@ if __name__ == '__main__':
         model_params['should_save_model'] = False
         model = DenseNet(for_test_only=True, init_variables=init_variables, init_global=init_global, bottleneck_output_size=4*args.growth_rate ,first_output_features=2*args.growth_rate,data_provider=data_provider, **model_params)
         print("Data provider train images: ", data_provider.train.num_examples)
-        model.train_all_epochs(train_params)
+        if args.train_again:
+            model.train_all_epochs(train_params)
     if args.test:
         if not args.train and not args.comprese:
             model.load_model()

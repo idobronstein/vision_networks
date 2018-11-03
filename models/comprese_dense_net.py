@@ -81,7 +81,6 @@ class CompreseDenseNet:
 		return new_kernel_vector
 
 	def cluster_composite_layer(self, composite_layer):
-		'''
 		h, w, i, o = composite_layer.shape
 		composite_layer_vactor = self.densenet_model.sess.run(composite_layer)
 		composite_layer_vactor_move = np.moveaxis(composite_layer_vactor, -1, 0)
@@ -89,10 +88,9 @@ class CompreseDenseNet:
 		k_meas_res = self.k_means.fit(composite_layer_vactor_reshape)
 		cluster_indices = k_meas_res.labels_
 		cluster_centers_vector = k_meas_res.cluster_centers_
-		cluster_centers = [np.reshape(cluster_centers_vector[k], [h, w, i]) for k in range(self.new_growth_rate)]
+		cluster_centers = [np.reshape(cluster_centers_vector[k], [h, w, i]) for k in cluster_indices]
+		#cluster_centers = [np.reshape(cluster_centers_vector[k], [h, w, i]) for k in range(self.new_growth_rate)]
 		cluster_centers = np.moveaxis(cluster_centers, 0, 3)
-		'''
-		cluster_centers = self.densenet_model.sess.run(composite_layer)
 		cluster_indices = range(12)
 		return cluster_centers, cluster_indices
 

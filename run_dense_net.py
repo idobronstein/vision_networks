@@ -242,10 +242,10 @@ if __name__ == '__main__':
         model_params['growth_rate'] = args.clusster_num
         model = DenseNet(for_test_only=True, init_variables=init_variables, init_global=init_global, bottleneck_output_size=4*args.growth_rate ,data_provider=data_provider, **model_params)
         new_varaible = model.get_trainable_variables_value()
-        #if len(old_varaible) == len(new_varaible):
-        #    for i in range(len(old_varaible)):
-        #        diff = abs(new_varaible[i] - old_varaible[i]).sum()
-        #        print("diffrent {index} is: {diff}".format(index=i, diff=diff) )
+        if len(old_varaible) == len(new_varaible):
+            for i in range(len(old_varaible)):
+                diff = abs(new_varaible[i] - old_varaible[i]).sum()
+                print("diffrent {index} is: {diff}".format(index=i, diff=diff) )
     if args.test:
         if not args.train and not args.comprese:
             model.load_model()

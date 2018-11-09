@@ -366,6 +366,7 @@ class DenseNet:
         # add N required blocks
         for block in range(self.total_blocks):
             with tf.variable_scope("Block_%d" % block,  reuse=tf.AUTO_REUSE):
+                print(output)
                 output = self.add_block(output, growth_rate, layers_per_block)
             # last block exist without transition layer
             if block != self.total_blocks - 1:

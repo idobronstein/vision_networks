@@ -10,7 +10,7 @@ import tensorflow as tf
 from sklearn.cluster import KMeans
 
 K_MEANS_ITERATION_NUM = 20
-K0 = [24, 108, 150]
+K0 = [48, 216, 300]
 
 class CompreseDenseNet:
 	def __init__(self, densenet_model, new_growth_rate):

@@ -101,7 +101,6 @@ class CompreseDenseNet:
 					OtC[cluster_num, index] = 1
 		return OtC
 
-
 	def adjust_bottleneck_kernel(self, bottleneck_kernel, original_to_comprese, k0, layer_num):
 		bottleneck_kernel_vector = self.densenet_model.sess.run(bottleneck_kernel)
 		# don't touch k0 first params
@@ -118,16 +117,33 @@ class CompreseDenseNet:
 	def adjust_batch_norm(self, batch_norm, original_to_comprese, k0, layer_num):
 		batch_norm_vector = self.densenet_model.sess.run(batch_norm)
 		# don't touch k0 first params
+		variance = batch_norm_vector[-1]
+		mean = batch_norm_vector[-2]
+		sqaured_mean = [v + m**2 for v, m in zip(variance, mean)]
 		new_batch_norm_vector = []
-		for param in batch_norm_vector:
+		for i, param in enumerate(batch_norm_vector):
 			adjust_param = param[:k0]
 			if not layer_num == 0:
 				for j in range(layer_num):
 					start_index = k0 + j*self.densenet_model.growth_rate
 					param_slice = param[start_index : start_index + self.densenet_model.growth_rate]
-					adjust_param_slice = np.tensordot(original_to_comprese[j], param_slice ,(1, 0))
-					for i in range(len(original_to_comprese[j])):
-						adjust_param_slice[i] = (1 / original_to_comprese[j][i].sum()) * adjust_param_slice[i]	
+					if i != 3:
+						adjust_param_slice = np.tensordot(original_to_comprese[j], param_slice ,(1, 0))
+						for k in range(len(original_to_comprese[j])):
+							adjust_param_slice[k] = (1 / original_to_comprese[j][k].sum()) * adjust_param_slice[k]	
+					else:
+						mean_slice = param_slice
+						sqaured_mean_slice = sqaured_mean[start_index : start_index + self.densenet_model.growth_rate]
+						adjust_param_slice = np.zeros(len(original_to_comprese[j]))
+						for a in range(len(original_to_comprese[j])):
+							cluster_size = 0
+							adjust_variance = 0
+							for b in range(len(original_to_comprese[j][a])):
+								if original_to_comprese[j][a, b] == 1:
+									cluster_size += 1
+									adjust_variance += sqaured_mean_slice[b] - mean_slice[b] ** 2
+							adjust_variance = (1 / cluster_size ** 2) * adjust_variance
+							adjust_param_slice[a] = adjust_variance
 					adjust_param = np.concatenate((adjust_param, adjust_param_slice), axis=0)
 			new_batch_norm_vector.append(adjust_param)
 		return new_batch_norm_vector

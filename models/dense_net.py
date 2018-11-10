@@ -10,10 +10,10 @@ import tensorflow as tf
 
 
 TF_VERSION = float('.'.join(tf.__version__.split('.')[:2]))
-FLAG = True
+
 
 class DenseNet:
-    def __init__(self, for_test_only, init_variables, init_global, bottleneck_output_size, first_output_features, data_provider, growth_rate, depth,
+    def __init__(self, for_test_only, init_variables, init_global, data_provider, growth_rate, depth,
                  total_blocks, keep_prob,
                  weight_decay, nesterov_momentum, model_type, dataset,
                  should_save_logs, should_save_model,
@@ -53,10 +53,7 @@ class DenseNet:
         self.growth_rate = growth_rate
         # how many features will be received after first convolution
         # value the same as in the original Torch code
-        if not first_output_features:
-            self.first_output_features = growth_rate * 2
-        else: 
-            self.first_output_features = first_output_features
+        self.first_output_features = growth_rate * 2
         self.total_blocks = total_blocks
         self.layers_per_block = (depth - (total_blocks + 1)) // total_blocks
         self.bc_mode = bc_mode
@@ -68,10 +65,6 @@ class DenseNet:
                       model_type, self.total_blocks, self.layers_per_block))
         if bc_mode:
             self.layers_per_block = self.layers_per_block // 2
-            if not bottleneck_output_size:
-                self.bottleneck_output_size = self.growth_rate * 4
-            else:
-                self.bottleneck_output_size = bottleneck_output_size
             print("Build %s model with %d blocks, "
                   "%d bottleneck layers and %d composite layers each." % (
                       model_type, self.total_blocks, self.layers_per_block,
@@ -123,7 +116,6 @@ class DenseNet:
             for dim in shape:
                 variable_parametes *= dim.value
             total_parameters += variable_parametes
-        self.total_parameters = total_parameters
         print("Total training params: %.1fM" % (total_parameters / 1e6))
 
     @property
@@ -196,7 +188,7 @@ class DenseNet:
             name='learning_rate')
         self.is_training = tf.placeholder(tf.bool, shape=[])
 
-    def composite_function(self, _input, out_features, kernel_size=3):
+    def composite_function(self, _input, out_features, kernel_size=3, kernel=None):
         """Function from paper H_l that performs:
         - batch normalization
         - ReLU nonlinearity
@@ -209,16 +201,21 @@ class DenseNet:
             # ReLU
             output = tf.nn.relu(output)
             # convolution
-            output = self.conv2d(output, out_features=out_features, kernel_size=kernel_size)
+            if kernel is not None:
+                output = self.conv2d(
+                    output, out_features=out_features, kernel=kernel)
+            else:
+                output = self.conv2d(
+                    output, out_features=out_features, kernel_size=kernel_size)
             # dropout(in case of training and in case it is no 1.0)
             output = self.dropout(output)
         return output
 
-    def bottleneck(self, _input):
+    def bottleneck(self, _input, out_features):
         with tf.variable_scope("bottleneck", reuse=tf.AUTO_REUSE):
             output = self.batch_norm(_input)
             output = tf.nn.relu(output)
-            inter_features = self.bottleneck_output_size
+            inter_features = out_features * 4
             output = self.conv2d(
                 output, out_features=inter_features, kernel_size=1,
                 padding='VALID')
@@ -234,7 +231,7 @@ class DenseNet:
             comp_out = self.composite_function(
                 _input, out_features=growth_rate, kernel_size=3)
         elif self.bc_mode:
-            bottleneck_out = self.bottleneck(_input)
+            bottleneck_out = self.bottleneck(_input, out_features=growth_rate)
             comp_out = self.composite_function(bottleneck_out, out_features=growth_rate, kernel_size=3)
         # concatenate _input with out from composite function
         if TF_VERSION >= 1.0:
@@ -307,8 +304,8 @@ class DenseNet:
             param_initializers={
                 'beta': tf.convert_to_tensor(self.init_variables[self.init_variables_position][0]),
                 'gamma': tf.convert_to_tensor(self.init_variables[self.init_variables_position+1][0]),
-                'moving_mean': tf.convert_to_tensor(self.init_global[self.init_global_position][0]),
-                'moving_variance': tf.convert_to_tensor(self.init_global[self.init_global_position+1][0]), 
+                'moving_mean': tf.convert_to_tensor(self.init_global[self.init_global_position]),
+                'moving_variance': tf.convert_to_tensor(self.init_global[self.init_global_position+1]), 
             }
             self.init_variables_position += 2
             self.init_global_position += 2
@@ -355,11 +352,13 @@ class DenseNet:
             bias = tf.get_variable(name, initializer=initial)
         return bias
 
+
     def _build_graph(self):
         growth_rate = self.growth_rate
         layers_per_block = self.layers_per_block
         # first - initial 3 x 3 conv to first_output_features
         with tf.variable_scope("Initial_convolution",  reuse=tf.AUTO_REUSE):
+            #import ipdb; ipdb.set_trace()
             output = self.conv2d(
                 self.images,
                 out_features=self.first_output_features,
@@ -383,12 +382,13 @@ class DenseNet:
             logits=logits, labels=self.labels))
         self.cross_entropy = cross_entropy
         l2_loss = tf.add_n([tf.nn.l2_loss(var) for var in tf.trainable_variables()])
-          
-        # optimizer and train step
-        optimizer = tf.train.MomentumOptimizer(
-            self.learning_rate, self.nesterov_momentum, use_nesterov=True)
-        self.train_step = optimizer.minimize(
-            cross_entropy + l2_loss * self.weight_decay)
+        
+        if not self.for_test_only:    
+            # optimizer and train step
+            optimizer = tf.train.MomentumOptimizer(
+                self.learning_rate, self.nesterov_momentum, use_nesterov=True)
+            self.train_step = optimizer.minimize(
+                cross_entropy + l2_loss * self.weight_decay)
     
         correct_prediction = tf.equal(
             tf.argmax(prediction, 1),

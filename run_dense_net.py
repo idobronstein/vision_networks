@@ -31,7 +31,12 @@ train_params_svhn = {
     'normalization': 'divide_255',
 }
 
-COMPOSITE_NAME_REGEX = re.compile('(Block_)(\d)(/layer_)(\d)(/composite_function/kernel:0)')
+COMPOSITE_NAME_REGEX = re.compile('(Block_)(\d)(/layer_)(\d{1,2})(/composite_function/kernel:0)')
+BOTTLENECK_NAME_REGEX = re.compile('(Block_)(\d)(/layer_)(\d{1,2})(/bottleneck/kernel:0)')
+TRANSITION_NAME_REGEX = re.compile('(Transition_after_block_)(\d{1,2})(/composite_function/kernel:0)')
+BATCH_NORN_NAME_REGEX = re.compile('(Block_)(\d)(/layer_)(\d{1,2})(/bottleneck/BatchNorm/)(beta|gamma|moving_mean|moving_variance)(:0)')
+TRANSITION_BATCH_NORN_NAME_REGEX = re.compile('(Transition_after_block_)(\d)(/composite_function/BatchNorm/)(beta|gamma|moving_mean|moving_variance)(:0)')
+TRANSITION_TO_CLASS_BATCH_NORN_NAME_REGEX = re.compile('(Transition_to_classes/BatchNorm/)(beta|gamma|moving_mean|moving_variance)(:0)')
 
 def get_train_params_by_name(name):
     if name in ['C10', 'C10+', 'C100', 'C100+']:
@@ -45,6 +50,9 @@ if __name__ == '__main__':
     parser.add_argument(
         '--train', action='store_true',
         help='Train the model')
+    parser.add_argument(
+        '--train_again', action='store_true',
+        help='Train the model again after clustering')
     parser.add_argument(
         '--test', action='store_true',
         help='Test model for required dataset if pretrained model exists.'
@@ -64,7 +72,7 @@ if __name__ == '__main__':
         '--clusster_num', '-c', type=int, default=12,
         help='If compresion, state how much clster to each layer.')
     parser.add_argument(
-        '--growth_rate', '-k', type=int, choices=[12, 24, 40],
+        '--growth_rate', '-k', type=int,
         default=12,
         help='Grows rate for every layer, '
              'choices were restricted to used in paper')
@@ -147,7 +155,7 @@ if __name__ == '__main__':
     print("Prepare training data...")
     data_provider = get_data_provider_by_name(args.dataset, train_params)
     print("Initialize the model..")
-    model = DenseNet(for_test_only=False, init_variables=None, init_global=None, data_provider=data_provider, **model_params)
+    model = DenseNet(for_test_only=False, init_variables=None, bottleneck_output_size=None, first_output_features=None, data_provider=data_provider, **model_params)
     if args.train:
         print("Data provider train images: ", data_provider.train.num_examples)
         model.train_all_epochs(train_params)
@@ -155,31 +163,44 @@ if __name__ == '__main__':
         if not args.train:
             model.load_model()
         old_varaible = model.get_trainable_variables_value()
+        old_param_num = model.total_parameters
         print("Commpresing the network")
-        #import ipdb; ipdb.set_trace()
         comprese_model = CompreseDenseNet(model, args.clusster_num)
-        cluster_kernels = comprese_model.cluster()
+        all_new_comprese_kernels, all_new_bottleneck_kernels, all_new_transion_kernels, new_W = comprese_model.comprese()
         init_variables = []
         for var in tf.trainable_variables():
             composite_match = COMPOSITE_NAME_REGEX.match(var.name)
+            bottleneck_match = BOTTLENECK_NAME_REGEX.match(var.name)
+            transition_match = TRANSITION_NAME_REGEX.match(var.name)
             if composite_match:
                 block_index = int(composite_match.groups()[1])
                 layer_index = int(composite_match.groups()[3])
-                init_variables.append((np.float32(cluster_kernels[block_index][layer_index]), var.name))
+                init_variables.append((np.float32(all_new_comprese_kernels[block_index][layer_index]), var.name))
+            elif bottleneck_match:
+                block_index = int(bottleneck_match.groups()[1])
+                layer_index = int(bottleneck_match.groups()[3])
+                init_variables.append((np.float32(all_new_bottleneck_kernels[block_index][layer_index]), var.name))
+            elif transition_match:
+                block_index = int(transition_match.groups()[1])
+                init_variables.append((np.float32(all_new_transion_kernels[block_index]), var.name))
+            elif var.name == 'Transition_to_classes/W:0':
+                init_variables.append((np.float32(new_W), var.name))
             else:
                 var_vector = np.float32(model.sess.run(var))
                 init_variables.append((var_vector, var.name))
-        init_global = []
-        for var in tf.global_variables():
-            if 'moving' in var.name:
-                var_vector = np.float32(model.sess.run(var))
-                init_global.append(var_vector)
         model.close()
-        model = DenseNet(for_test_only=True, init_variables=init_variables, init_global=init_global, data_provider=data_provider, **model_params)
-        new_varaible = model.get_trainable_variables_value()
-        for i in range(len(old_varaible)):
-            diff = abs(new_varaible[i] - old_varaible[i]).sum()
-            print("diffrent {index} is: {diff}".format(index=i, diff=diff) )
+        model_params['growth_rate'] = args.clusster_num
+        model_params['n_epochs'] = 50
+        model_params['initial_learning_rate'] = 0.001
+        model_params['reduce_lr_epoch_1'] = 25
+        model_params['reduce_lr_epoch_2'] = 40
+        model_params['should_save_model'] = False
+        model = DenseNet(for_test_only=True, init_variables=init_variables, bottleneck_output_size=4*args.growth_rate ,first_output_features=2*args.growth_rate,data_provider=data_provider, **model_params)
+        new_param_num = model.total_parameters
+        print("The comprese rate is: {}".format((1 - (new_param_num / old_param_num)) * 100))
+        if args.train_again:
+            print("Data provider train images: ", data_provider.train.num_examples)
+            model.train_all_epochs(train_params)
     if args.test:
         if not args.train and not args.comprese:
             model.load_model()
